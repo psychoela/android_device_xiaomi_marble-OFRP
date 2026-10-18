@@ -1,0 +1,130 @@
+name: Build OrangeFox R12.0 (marble, fox_16.0)
+
+# Simpan file ini sebagai: .github/workflows/build-ofrp.yml
+# di branch fox_16.0 (default branch) fork kamu, lalu jalankan dari tab Actions.
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Jenis build"
+        type: choice
+        default: recovery
+        options:
+          - recovery   # recoveryimage (flash ke recovery_ab)
+          - boot       # bootimage (recovery-as-boot, untuk fastboot boot)
+      release:
+        description: "Upload juga ke GitHub Releases"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  FOX_DIR: /home/runner/fox_16.0
+  DEVICE: marble
+  VENDOR: xiaomi
+  LUNCH: twrp_marble-bp2a-eng   # samakan dengan baris `lunch` di vendorsetup.sh
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Kosongkan disk runner
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          docker-images: true
+          swap-storage: true
+          large-packages: false
+
+      - name: Checkout device tree (fork ini)
+        uses: actions/checkout@v4
+        with:
+          path: device_tree
+
+      - name: Pasang dependency build
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git-core gnupg flex bison build-essential zip curl zlib1g-dev \
+            libc6-dev-i386 libncurses-dev x11proto-core-dev libx11-dev \
+            lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip \
+            fontconfig python3 python-is-python3 rsync bc ccache \
+            openjdk-17-jdk-headless
+          mkdir -p ~/bin
+          curl -s https://storage.googleapis.com/git-repo-downloads/repo -o ~/bin/repo
+          chmod +x ~/bin/repo
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@users.noreply.github.com"
+          git config --global color.ui false
+
+      - name: Sync source OrangeFox (manifest fox_16.0)
+        run: |
+          git clone --depth=1 https://gitlab.com/OrangeFox/sync.git ~/OrangeFox_sync
+          cd ~/OrangeFox_sync
+          ./orangefox_sync.sh --branch 16.0 --path "$FOX_DIR"
+
+      - name: Pasang device tree ke source
+        run: |
+          mkdir -p "$FOX_DIR/device/$VENDOR/$DEVICE"
+          rsync -a --exclude='.git' --exclude='.github' \
+            "$GITHUB_WORKSPACE/device_tree/" "$FOX_DIR/device/$VENDOR/$DEVICE/"
+          ls -la "$FOX_DIR/device/$VENDOR/$DEVICE"
+
+      - name: Build
+        run: |
+          cd "$FOX_DIR"
+          export ALLOW_MISSING_DEPENDENCIES=true
+          export FOX_BUILD_DEVICE="$DEVICE"
+          export LC_ALL=C
+          if [ "${{ inputs.build_type }}" = "boot" ]; then
+            export BUILD_BOOTIMAGE=true
+            TARGET=bootimage
+          else
+            TARGET=recoveryimage
+          fi
+          set +e
+          source build/envsetup.sh
+          set -e
+          lunch "$LUNCH"
+          mka adbd "$TARGET" -j"$(nproc)"
+
+      - name: Kumpulkan hasil
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/out_files"
+          OUT="$FOX_DIR/out/target/product/$DEVICE"
+          cp -v "$OUT"/OrangeFox-*.img "$GITHUB_WORKSPACE/out_files/" 2>/dev/null || true
+          cp -v "$OUT"/OrangeFox-*.zip "$GITHUB_WORKSPACE/out_files/" 2>/dev/null || true
+          cp -v "$OUT"/recovery.img    "$GITHUB_WORKSPACE/out_files/" 2>/dev/null || true
+          cp -v "$OUT"/boot.img        "$GITHUB_WORKSPACE/out_files/" 2>/dev/null || true
+          cd "$GITHUB_WORKSPACE/out_files"
+          ls -la
+          md5sum * | tee md5sums.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrangeFox-R12.0-marble
+          path: out_files/*
+          if-no-files-found: error
+
+      - name: Upload ke Releases (opsional)
+        if: ${{ inputs.release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ofrp-r12.0-${{ github.run_number }}
+          name: OrangeFox R12.0 (unofficial) marble #${{ github.run_number }}
+          prerelease: true
+          body: |
+            Unofficial OrangeFox R12.0 (fox_16.0) build for POCO F5 / Redmi Note 12 Turbo (marble).
+            Device tree based on Ctapchuk/android_device_xiaomi_marble-OFRP.
+          files: out_files/*
+          
