@@ -1,0 +1,41 @@
+name: Cek akses repo OrangeFox (cepat)
+
+# Simpan sebagai: .github/workflows/check-sources.yml
+# Jalankan dari tab Actions. Selesai dalam kurang dari 1 menit.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Tes akses 3 repo yang gagal
+        shell: bash
+        run: |
+          export GIT_TERMINAL_PROMPT=0
+          BASE=https://gitlab.com/OrangeFox
+
+          echo "##### KONTROL: repo yang berhasil di-sync sebelumnya #####"
+          git ls-remote "$BASE/vendor/recovery" 2>&1 | head -5
+          echo
+
+          for r in external/libarchive external/libfuse3 external/fox-go; do
+            echo "##### $r #####"
+            echo "--- HTTP status ---"
+            curl -sS -o /dev/null -w "HTTP %{http_code}\n" \
+              "$BASE/$r.git/info/refs?service=git-upload-pack" 2>&1
+            echo "--- git ls-remote (error asli, jika ada) ---"
+            git ls-remote "$BASE/$r" 2>&1 | head -15
+            echo "--- apakah SHA yang dikunci manifest masih ada? ---"
+            git ls-remote "$BASE/$r" 2>/dev/null \
+              | grep -E '9f1aa0d3|68f54e5b|992b0923' || echo "(tidak ditemukan di refs)"
+            echo
+          done
+
+          echo "##### Sumber alternatif (AOSP / TeamWin / LineageOS) #####"
+          git ls-remote https://android.googlesource.com/platform/external/libarchive 2>&1 | head -3
+          git ls-remote https://github.com/TeamWin/android_external_libarchive 2>&1 | head -3
+          git ls-remote https://github.com/LineageOS/android_external_libarchive 2>&1 | head -3
+          git ls-remote https://github.com/TeamWin/android_external_libfuse3 2>&1 | head -3
