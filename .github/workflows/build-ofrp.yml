@@ -72,10 +72,10 @@ jobs:
           cd ~/OrangeFox_sync
           # Percobaan pertama: skrip resmi (init + sync)
           if ! ./orangefox_sync.sh --branch 16.0 --path "$FOX_DIR"; then
-            echo "Sync pertama gagal. Manifest mengunci 3 repo ke commit SHA yang tidak bisa diunduh."
-            echo "Pakai local manifest: ikuti branch fox_16.0 untuk 3 repo itu."
+            echo "Sync pertama gagal: 3 repo (libarchive, libfuse3, fox-go) privat di GitLab OrangeFox (HTTP 401)."
+            echo "EKSPERIMENTAL: buang 3 project itu dari manifest dan lanjutkan sync."
+            echo "Build bisa gagal nanti jika ada modul yang membutuhkannya."
             cd "$FOX_DIR"
-            grep -n '<remote' -A3 .repo/manifests/*.xml | head -20 || true
             mkdir -p .repo/local_manifests
             cat > .repo/local_manifests/ofox-fix.xml <<'XML'
           <?xml version="1.0" encoding="UTF-8"?>
@@ -83,14 +83,12 @@ jobs:
             <remove-project name="external/libarchive"/>
             <remove-project name="external/libfuse3"/>
             <remove-project name="external/fox-go"/>
-            <project path="external/libarchive" name="external/libarchive" remote="OrangeFox" revision="fox_16.0"/>
-            <project path="external/libfuse3" name="external/libfuse3" remote="OrangeFox" revision="fox_16.0"/>
-            <project path="prebuilts/fox-go" name="external/fox-go" remote="OrangeFox" revision="fox_16.0"/>
           </manifest>
           XML
             sed -i 's/^          //' .repo/local_manifests/ofox-fix.xml
             cat .repo/local_manifests/ofox-fix.xml
-            if ! repo sync -c --no-clone-bundle --no-tags --force-sync -j4; then
+            # Jalankan ulang skrip resmi agar langkah setelah sync (vendor tree, patch) ikut jalan
+            if ! (cd ~/OrangeFox_sync && ./orangefox_sync.sh --branch 16.0 --path "$FOX_DIR"); then
               echo "=== Masih gagal. Info untuk diagnosa ==="
               for p in external/libarchive external/libfuse3 prebuilts/fox-go; do
                 echo "--- $p ---"
