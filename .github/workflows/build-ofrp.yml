@@ -70,7 +70,22 @@ jobs:
         run: |
           git clone --depth=1 https://gitlab.com/OrangeFox/sync.git ~/OrangeFox_sync
           cd ~/OrangeFox_sync
-          ./orangefox_sync.sh --branch 16.0 --path "$FOX_DIR"
+          # Percobaan pertama: skrip resmi (init + sync)
+          if ! ./orangefox_sync.sh --branch 16.0 --path "$FOX_DIR"; then
+            echo "Sync pertama gagal, ulangi hanya repo yang gagal..."
+            cd "$FOX_DIR"
+            ok=0
+            for i in 1 2 3 4; do
+              echo "=== Percobaan ulang $i ==="
+              if repo sync -c --no-clone-bundle --no-tags --force-sync \
+                   --retry-fetches=5 -j2; then
+                ok=1; break
+              fi
+              sleep $((i * 30))
+            done
+            [ "$ok" = 1 ] || { echo "Sync tetap gagal"; exit 1; }
+          fi
+          ls "$FOX_DIR"
 
       - name: Pasang device tree ke source
         run: |
