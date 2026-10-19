@@ -44,6 +44,16 @@ jobs:
           swap-storage: true
           large-packages: false
 
+      - name: Tambah swap 16GB (RAM runner hanya 15.6GB)
+        run: |
+          sudo swapoff -a || true
+          sudo fallocate -l 16G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+          df -h /
+
       - name: Checkout device tree (fork ini)
         uses: actions/checkout@v4
         with:
