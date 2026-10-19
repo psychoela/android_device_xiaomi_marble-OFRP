@@ -72,20 +72,33 @@ jobs:
           cd ~/OrangeFox_sync
           # Percobaan pertama: skrip resmi (init + sync)
           if ! ./orangefox_sync.sh --branch 16.0 --path "$FOX_DIR"; then
-            echo "Sync pertama gagal. Diagnosa repo yang gagal..."
+            echo "Sync pertama gagal. Manifest mengunci 3 repo ke commit SHA yang tidak bisa diunduh."
+            echo "Pakai local manifest: ikuti branch fox_16.0 untuk 3 repo itu."
             cd "$FOX_DIR"
-            BAD="external/libarchive external/libfuse3 prebuilts/fox-go"
-            echo "=== URL remote ==="
-            repo list -u $BAD 2>&1 || repo list $BAD 2>&1 || true
-            echo "=== Manifest (bagian terkait) ==="
-            grep -rn -B1 -A2 -E 'libarchive|libfuse3|fox-go' .repo/manifests/*.xml 2>/dev/null | head -60 || true
-            echo "=== Sync ulang satu per satu, verbose (tampilkan error git asli) ==="
-            for p in $BAD; do
-              echo "--- $p ---"
-              repo sync -c --no-clone-bundle --no-tags --force-sync -j1 -v "$p" 2>&1 | tail -25 || true
-            done
-            echo "Sync gagal. Kirim log langkah ini ke Claude."
-            exit 1
+            grep -n '<remote' -A3 .repo/manifests/*.xml | head -20 || true
+            mkdir -p .repo/local_manifests
+            cat > .repo/local_manifests/ofox-fix.xml <<'XML'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <manifest>
+            <remove-project name="external/libarchive"/>
+            <remove-project name="external/libfuse3"/>
+            <remove-project name="external/fox-go"/>
+            <project path="external/libarchive" name="external/libarchive" remote="OrangeFox" revision="fox_16.0"/>
+            <project path="external/libfuse3" name="external/libfuse3" remote="OrangeFox" revision="fox_16.0"/>
+            <project path="prebuilts/fox-go" name="external/fox-go" remote="OrangeFox" revision="fox_16.0"/>
+          </manifest>
+          XML
+            sed -i 's/^          //' .repo/local_manifests/ofox-fix.xml
+            cat .repo/local_manifests/ofox-fix.xml
+            if ! repo sync -c --no-clone-bundle --no-tags --force-sync -j4; then
+              echo "=== Masih gagal. Info untuk diagnosa ==="
+              for p in external/libarchive external/libfuse3 prebuilts/fox-go; do
+                echo "--- $p ---"
+                repo sync -c --no-clone-bundle --no-tags --force-sync -j1 -v "$p" 2>&1 | tail -25 || true
+              done
+              echo "Sync gagal. Kirim log langkah ini ke Claude."
+              exit 1
+            fi
           fi
           ls "$FOX_DIR"
 
