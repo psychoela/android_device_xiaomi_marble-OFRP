@@ -14,8 +14,21 @@ jobs:
       - name: Tes akses 3 repo yang gagal
         shell: bash
         run: |
+          set +e +o pipefail
           export GIT_TERMINAL_PROMPT=0
           BASE=https://gitlab.com/OrangeFox
+
+          echo "##### Repo publik apa saja yang ada di grup OrangeFox/external? #####"
+          curl -sS "https://gitlab.com/api/v4/groups/OrangeFox%2Fexternal/projects?per_page=100&include_subgroups=true&simple=true" \
+            | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d),"repo publik"); [print(" -",p["path_with_namespace"]) for p in d] if isinstance(d,list) else print(d)'
+          echo
+          echo "##### Cari nama libarchive / libfuse3 / fox-go di seluruh grup OrangeFox #####"
+          for q in libarchive libfuse fox-go; do
+            echo "--- cari: $q ---"
+            curl -sS "https://gitlab.com/api/v4/groups/OrangeFox/projects?search=$q&include_subgroups=true&simple=true" \
+              | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d),"hasil") if isinstance(d,list) else print(d); [print(" -",p["path_with_namespace"]) for p in (d if isinstance(d,list) else [])]'
+          done
+          echo
 
           echo "##### KONTROL: repo yang berhasil di-sync sebelumnya #####"
           git ls-remote "$BASE/vendor/recovery" 2>&1 | head -5
@@ -39,3 +52,4 @@ jobs:
           git ls-remote https://github.com/TeamWin/android_external_libarchive 2>&1 | head -3
           git ls-remote https://github.com/LineageOS/android_external_libarchive 2>&1 | head -3
           git ls-remote https://github.com/TeamWin/android_external_libfuse3 2>&1 | head -3
+          
