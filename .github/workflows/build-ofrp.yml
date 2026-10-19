@@ -72,18 +72,20 @@ jobs:
           cd ~/OrangeFox_sync
           # Percobaan pertama: skrip resmi (init + sync)
           if ! ./orangefox_sync.sh --branch 16.0 --path "$FOX_DIR"; then
-            echo "Sync pertama gagal, ulangi hanya repo yang gagal..."
+            echo "Sync pertama gagal. Diagnosa repo yang gagal..."
             cd "$FOX_DIR"
-            ok=0
-            for i in 1 2 3 4; do
-              echo "=== Percobaan ulang $i ==="
-              if repo sync -c --no-clone-bundle --no-tags --force-sync \
-                   --retry-fetches=5 -j2; then
-                ok=1; break
-              fi
-              sleep $((i * 30))
+            BAD="external/libarchive external/libfuse3 prebuilts/fox-go"
+            echo "=== URL remote ==="
+            repo list -u $BAD 2>&1 || repo list $BAD 2>&1 || true
+            echo "=== Manifest (bagian terkait) ==="
+            grep -rn -B1 -A2 -E 'libarchive|libfuse3|fox-go' .repo/manifests/*.xml 2>/dev/null | head -60 || true
+            echo "=== Sync ulang satu per satu, verbose (tampilkan error git asli) ==="
+            for p in $BAD; do
+              echo "--- $p ---"
+              repo sync -c --no-clone-bundle --no-tags --force-sync -j1 -v "$p" 2>&1 | tail -25 || true
             done
-            [ "$ok" = 1 ] || { echo "Sync tetap gagal"; exit 1; }
+            echo "Sync gagal. Kirim log langkah ini ke Claude."
+            exit 1
           fi
           ls "$FOX_DIR"
 
