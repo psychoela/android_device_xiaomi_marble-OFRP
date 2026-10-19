@@ -17,6 +17,10 @@ on:
         description: "Upload juga ke GitHub Releases"
         type: boolean
         default: false
+      extra_flags:
+        description: "Tambah flag BoardConfig dari tree Ctapchuk (haptics, modul touch, lpdump, dll). Coba setelah build tanpa flag berhasil"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -116,6 +120,23 @@ jobs:
           rsync -a --exclude='.git' --exclude='.github' \
             "$GITHUB_WORKSPACE/device_tree/" "$FOX_DIR/device/$VENDOR/$DEVICE/"
           ls -la "$FOX_DIR/device/$VENDOR/$DEVICE"
+
+      - name: Tambah flag Ctapchuk ke BoardConfig (opsional)
+        if: ${{ inputs.extra_flags }}
+        run: |
+          BC="$FOX_DIR/device/$VENDOR/$DEVICE/BoardConfig.mk"
+          cat >> "$BC" <<'FLAGS'
+
+          # === Flag tambahan dari tree Ctapchuk (rilis 2025-02-15) ===
+          TW_SUPPORT_INPUT_AIDL_HAPTICS_FIX_OFF := true
+          TW_SUPPORT_INPUT_AIDL_HAPTICS_FQNAME := "IVibrator/vibratorfeature"
+          TW_LOAD_VENDOR_BOOT_MODULES := true
+          TW_LOAD_PREBUILT_MODULES := true
+          TW_ALLOW_REWRITE_SUPER_METADATA := true
+          TW_INCLUDE_LPDUMP := true
+          TW_ENABLE_BLKDISCARD := true
+          FLAGS
+          tail -15 "$BC"
 
       - name: Build
         run: |
